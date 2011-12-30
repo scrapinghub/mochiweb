@@ -66,7 +66,8 @@ request(Socket, Body) ->
         {ssl_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
-        _Other ->
+        Other ->
+            error_logger:info_msg("unexpected message in request/2 ~p~n", [Other]),
             handle_invalid_request(Socket)
     after ?REQUEST_RECV_TIMEOUT ->
         mochiweb_socket:close(Socket),
@@ -81,6 +82,7 @@ reentry(Body) ->
 headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
     ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
+    error_logger:info_msg("too many headers sent~n"),
     handle_invalid_request(Socket, Request, Headers);
 headers(Socket, Request, Headers, Body, HeaderCount) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
@@ -95,7 +97,8 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
-        _Other ->
+        Other ->
+            error_logger:info_msg("unexpected message in headers/5 ~p~n", [Other]),
             handle_invalid_request(Socket, Request, Headers)
     after ?HEADERS_RECV_TIMEOUT ->
         mochiweb_socket:close(Socket),
