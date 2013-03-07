@@ -2,6 +2,7 @@
 %% @copyright 2007 Mochi Media, Inc.
 
 %% @doc MochiWeb HTTP Request abstraction.
+-compile({parse_transform,pmod_pt}).
 
 -module(mochiweb_request, [Socket, Method, RawPath, Version, Headers]).
 -author('bob@mochimedia.com').

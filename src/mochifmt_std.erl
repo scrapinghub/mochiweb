@@ -2,6 +2,7 @@
 %% @copyright 2008 Mochi Media, Inc.
 
 %% @doc Template module for a mochifmt formatter.
+-compile({parse_transform,pmod_pt}).
 
 -module(mochifmt_std, []).
 -author('bob@mochimedia.com').

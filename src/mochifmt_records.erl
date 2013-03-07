@@ -8,6 +8,7 @@
 %%    1> M = mochifmt_records:new([{rec, record_info(fields, rec)}]),
 %%    M:format("{0.bar}", [#rec{bar=foo}]).
 %%    foo
+-compile({parse_transform,pmod_pt}).
 
 -module(mochifmt_records, [Recs]).
 -author('bob@mochimedia.com').

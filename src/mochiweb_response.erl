@@ -2,6 +2,7 @@
 %% @copyright 2007 Mochi Media, Inc.
 
 %% @doc Response abstraction.
+-compile({parse_transform,pmod_pt}).
 
 -module(mochiweb_response, [Request, Code, Headers]).
 -author('bob@mochimedia.com').
