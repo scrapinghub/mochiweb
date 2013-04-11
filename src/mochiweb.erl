@@ -41,12 +41,18 @@ new_request({Socket, {Method, {abs_path, Uri}, Version}, Headers}) ->
                          Uri,
                          Version,
                          mochiweb_headers:make(Headers));
-% this case probably doesn't "eew_xist".
-new_request({Socket, {Method, {absoluteURI, _Protocol, _Host, _Port, Uri},
-                      Version}, Headers}) ->
+% this case probably doesn't "exist".
+new_request({Socket, {Method, {absoluteURI, Protocol, Host, Port, Uri},
+                      Version}, Headers} = Args) ->
+    AbsoluteUri = case Port of
+        undefined ->
+            atom_to_list(Protocol) ++ "://" ++ Host ++ Uri;
+        Port ->
+            atom_to_list(Protocol) ++ "://" ++ Host ++ ":" ++ integer_to_list(Port) ++ Uri
+    end,
     mochiweb_request:new(Socket,
                          Method,
-                         Uri,
+                         AbsoluteUri,
                          Version,
                          mochiweb_headers:make(Headers));
 
@@ -58,7 +64,7 @@ new_request({Socket, {Method, '*'=Uri, Version}, Headers}) ->
                          Uri,
                          Version,
                          mochiweb_headers:make(Headers));
-new_request({Socket, {Method, {scheme, Host, Port}, Version}, Headers}) ->
+new_request({Socket, {Method, {scheme, _Host, _Port}, Version}, Headers}) ->
     mochiweb_request:new(Socket, Method, "", Version, mochiweb_headers:make(Headers)).
 
 %% @spec new_response({Request, integer(), Headers}) -> MochiWebResponse
