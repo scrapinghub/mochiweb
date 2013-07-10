@@ -102,7 +102,7 @@ get(peer) ->
 get(path) ->
     case erlang:get(?SAVE_PATH) of
         undefined ->
-            {Path0, _, _} = mochiweb_util:urlsplit_path(RawPath),
+            {_, _, Path0, _, _} = mochiweb_util:urlsplit(RawPath),
             Path = mochiweb_util:unquote(Path0),
             put(?SAVE_PATH, Path),
             Path;
@@ -411,7 +411,7 @@ cleanup() ->
 parse_qs() ->
     case erlang:get(?SAVE_QS) of
         undefined ->
-            {_, QueryString, _} = mochiweb_util:urlsplit_path(RawPath),
+            {_, _, _, QueryString, _} = mochiweb_util:urlsplit(RawPath),
             Parsed = mochiweb_util:parse_qs(QueryString),
             put(?SAVE_QS, Parsed),
             Parsed;
