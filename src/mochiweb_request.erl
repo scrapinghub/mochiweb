@@ -393,8 +393,7 @@ should_close() ->
                 andalso get_header_value("content-length") =/= undefined
                 andalso list_to_integer(get_header_value("content-length")) > 0)
         orelse (DidNotRecv
-                andalso get_header_value("transfer-encoding") =:= "chunked"),
-    true.
+                andalso get_header_value("transfer-encoding") =:= "chunked").
 
 %% @spec cleanup() -> ok
 %% @doc Clean up any junk in the process dictionary, required before continuing
