@@ -162,7 +162,7 @@ ipv6_supported() ->
 init(State=#mochiweb_socket_server{ip=Ip, port=Port, backlog=Backlog, nodelay=NoDelay}) ->
     process_flag(trap_exit, true),
     BaseOpts = [binary,
-                {reuseaddr, true},
+                {reuseaddr, false},
                 {packet, 0},
                 {backlog, Backlog},
                 {recbuf, ?RECBUF_SIZE},
