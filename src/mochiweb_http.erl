@@ -66,6 +66,10 @@ request(Socket, Body) ->
         {ssl_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
+        {tcp_error,_,emsgsize} ->
+            % R15B02 returns this then closes the socket, so close and exit
+            mochiweb_socket:close(Socket),
+            exit(normal);
         Other ->
             error_logger:info_msg("unexpected message in request/2 ~p~n", [Other]),
             handle_invalid_request(Socket)
@@ -95,6 +99,10 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             headers(Socket, Request, [{Name, Value} | Headers], Body,
                     1 + HeaderCount);
         {tcp_closed, _} ->
+            mochiweb_socket:close(Socket),
+            exit(normal);
+        {tcp_error,_,emsgsize} ->
+            % R15B02 returns this then closes the socket, so close and exit
             mochiweb_socket:close(Socket),
             exit(normal);
         Other ->
