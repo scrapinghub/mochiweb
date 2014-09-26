@@ -10,6 +10,8 @@
 -export([after_response/2, reentry/1]).
 -export([parse_range_request/1, range_skip_length/2]).
 
+-include("internal.hrl").
+
 -define(REQUEST_RECV_TIMEOUT, 300000).   %% timeout waiting for request line
 -define(HEADERS_RECV_TIMEOUT, 30000).    %% timeout waiting for headers
 
@@ -54,8 +56,16 @@ request(Socket, Body) ->
     ok = mochiweb_socket:setopts(Socket, [{active, once}]),
     receive
         {Protocol, _, {http_request, Method, Path, Version}} when Protocol == http orelse Protocol == ssl ->
-            ok = mochiweb_socket:setopts(Socket, [{packet, httph}]),
-            headers(Socket, {Method, Path, Version}, [], Body, 0);
+            case iolist_size([atom_to_list(Method), get_path(Path), tuple_to_list(Version)]) of
+                %% ?RECBUF_LIMIT - line ending bytes (\r\n)
+                Size when Size >= (?RECBUF_LIMIT - 2) ->
+                    Req = new_request(Socket, {Method, Path, Version}, []),
+                    Req:respond({413, [], ""}),
+                    ?MODULE:after_response(Body, Req);
+                _ ->
+                    ok = mochiweb_socket:setopts(Socket, [{packet, httph}]),
+                    headers(Socket, {Method, Path, Version}, [], Body, 0)
+            end;
         {Protocol, _, {http_error, "\r\n"}} when Protocol == http orelse Protocol == ssl ->
             request(Socket, Body);
         {Protocol, _, {http_error, "\n"}} when Protocol == http orelse Protocol == ssl ->
@@ -96,8 +106,20 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             call_body(Body, Req),
             ?MODULE:after_response(Body, Req);
         {Protocol, _, {http_header, _, Name, _, Value}} when Protocol == http orelse Protocol == ssl ->
-            headers(Socket, Request, [{Name, Value} | Headers], Body,
-                    1 + HeaderCount);
+            Name0 = case is_atom(Name) of
+                        false -> Name;
+                        true -> atom_to_list(Name)
+                    end,
+            case iolist_size([Name0, Value]) of
+                %% ?RECBUF_LIMIT - line ending bytes (\r\n) - one byte which is ":"
+                Size when Size >= (?RECBUF_LIMIT - 3) ->
+                    Req = new_request(Socket, Request, Headers),
+                    Req:respond({413, [], ""}),
+                    ?MODULE:after_response(Body, Req);
+                _ ->
+                    headers(Socket, Request, [{Name, Value} | Headers], Body,
+                            1 + HeaderCount)
+            end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
@@ -185,6 +207,18 @@ range_skip_length(Spec, Size) ->
         {_OutOfRange, _End} ->
             invalid_range
     end.
+
+get_path('*') ->
+    "*";
+get_path({scheme, _Host, _Port}) ->
+    "";
+get_path({abs_path, Uri}) ->
+    Uri;
+get_path({absoluteURI, Protocol, Host, undefined, Uri}) ->
+    atom_to_list(Protocol) ++ "://" ++ Host ++ Uri;
+get_path({absoluteURI, Protocol, Host, Port, Uri}) ->
+    atom_to_list(Protocol) ++ "://" ++ Host ++ ":" ++ integer_to_list(Port) ++ Uri.
+
 
 %%
 %% Tests

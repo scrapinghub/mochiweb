@@ -1,3 +1,3 @@
 
--define(RECBUF_SIZE, 8192).
-
+-define(RECBUF_SIZE, 16384).
+-define(RECBUF_LIMIT, ?RECBUF_SIZE / 2).
