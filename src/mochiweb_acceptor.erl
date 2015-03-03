@@ -8,21 +8,21 @@
 
 -include("internal.hrl").
 
--export([start_link/3, init/3]).
+-export([start_link/4, init/4]).
 
-start_link(Server, Listen, Loop) ->
-    proc_lib:spawn_link(?MODULE, init, [Server, Listen, Loop]).
+start_link(Server, Listen, Loop, AcceptTimeout) ->
+    proc_lib:spawn_link(?MODULE, init, [Server, Listen, Loop, AcceptTimeout]).
 
-init(Server, Listen, Loop) ->
+init(Server, Listen, Loop, AcceptTimeout) ->
     T1 = now(),
-    case catch mochiweb_socket:accept(Listen) of
+    case catch mochiweb_socket:accept(Listen, AcceptTimeout) of
         {ok, Socket} ->
             gen_server:cast(Server, {accepted, self(), timer:now_diff(now(), T1)}),
             call_loop(Loop, Socket);
         {error, closed} ->
             exit(normal);
         {error, timeout} ->
-            init(Server, Listen, Loop);
+            init(Server, Listen, Loop, AcceptTimeout);
         {error, esslaccept} ->
             exit(normal);
         Other ->

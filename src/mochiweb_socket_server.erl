@@ -25,6 +25,7 @@
          nodelay=false,
          backlog=128,
          active_sockets=0,
+         accept_timeout=2000,
          acceptor_pool_size=16,
          ssl=false,
          ssl_opts=[{ssl_imp, new}],
@@ -112,6 +113,8 @@ parse_options([{backlog, Backlog} | Rest], State) ->
     parse_options(Rest, State#mochiweb_socket_server{backlog=Backlog});
 parse_options([{nodelay, NoDelay} | Rest], State) ->
     parse_options(Rest, State#mochiweb_socket_server{nodelay=NoDelay});
+parse_options([{accept_timeout, AcceptTimeout} | Rest], State) ->
+    parse_options(Rest, State#mochiweb_socket_server{accept_timeout=AcceptTimeout});
 parse_options([{acceptor_pool_size, Max} | Rest], State) ->
     MaxInt = ensure_int(Max),
     parse_options(Rest,
@@ -182,11 +185,13 @@ init(State=#mochiweb_socket_server{ip=Ip, port=Port, backlog=Backlog, nodelay=No
     listen(Port, Opts, State).
 
 new_acceptor_pool(Listen,
-                  State=#mochiweb_socket_server{acceptor_pool=Pool,
+                  State=#mochiweb_socket_server{accept_timeout=AcceptTimeout,
+                                                acceptor_pool=Pool,
                                                 acceptor_pool_size=Size,
                                                 loop=Loop}) ->
     F = fun (_, S) ->
-                Pid = mochiweb_acceptor:start_link(self(), Listen, Loop),
+                Pid = mochiweb_acceptor:start_link(self(), Listen, Loop,
+                                                   AcceptTimeout),
                 sets:add_element(Pid, S)
         end,
     Pool1 = lists:foldl(F, Pool, lists:seq(1, Size)),
@@ -272,13 +277,14 @@ code_change(_OldVsn, State, _Extra) ->
     State.
 
 recycle_acceptor(Pid, State=#mochiweb_socket_server{
+                        accept_timeout=AcceptTimeout,
                         acceptor_pool=Pool,
                         listen=Listen,
                         loop=Loop,
                         active_sockets=ActiveSockets}) ->
     case sets:is_element(Pid, Pool) of
         true ->
-            Acceptor = mochiweb_acceptor:start_link(self(), Listen, Loop),
+            Acceptor = mochiweb_acceptor:start_link(self(), Listen, Loop, AcceptTimeout),
             Pool1 = sets:add_element(Acceptor, sets:del_element(Pid, Pool)),
             State#mochiweb_socket_server{acceptor_pool=Pool1};
         false ->
