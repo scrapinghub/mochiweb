@@ -7,6 +7,8 @@
 -author('bob@mochimedia.com').
 -export([start/1, start_link/1, stop/0, stop/1]).
 -export([loop/2]).
+-export([headers/5]).
+-export([handle_invalid_request/1]).
 -export([after_response/2, reentry/1]).
 -export([parse_range_request/1, range_skip_length/2]).
 
