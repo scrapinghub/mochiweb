@@ -261,12 +261,8 @@ start_response({Code, ResponseHeaders}) ->
 %% @doc Start the HTTP response by sending the Code HTTP response and
 %%      ResponseHeaders.
 start_raw_response({Code, ResponseHeaders}) ->
-    F = fun ({K, V}, Acc) ->
-                [mochiweb_util:make_io(K), <<": ">>, V, <<"\r\n">> | Acc]
-        end,
-    End = lists:foldl(F, [<<"\r\n">>],
-                      mochiweb_headers:to_list(ResponseHeaders)),
-    send([make_version(Version), make_code(Code), <<"\r\n">> | End]),
+    {Header, Response} = format_response_header({Code, ResponseHeaders}),
+    send(Header),
     mochiweb:new_response({THIS, Code, ResponseHeaders}).
 
 
@@ -279,6 +275,30 @@ start_response_length({Code, ResponseHeaders, Length}) ->
     HResponse = mochiweb_headers:make(ResponseHeaders),
     HResponse1 = mochiweb_headers:enter("Content-Length", Length, HResponse),
     start_response({Code, HResponse1}).
+
+%% @spec format_response_header({integer(), ioheaders()} | {integer(), ioheaders(), integer()}) -> iolist()
+%% @doc Format the HTTP response header, including the Code HTTP response and
+%%      ResponseHeaders including an optional Content-Length of Length. The server
+%%      will set header defaults such as  Date if not present in ResponseHeaders.
+format_response_header({Code, ResponseHeaders}) ->
+    HResponse = mochiweb_headers:make(ResponseHeaders),
+    HResponse1 = mochiweb_headers:default_from_list(server_headers(), HResponse),
+    HResponse2 = case should_close(THIS) of
+                     true ->
+                         mochiweb_headers:enter("Connection", "close", HResponse1);
+                     false ->
+                         HResponse1
+                 end,
+    F = fun ({K, V}, Acc) ->
+                [mochiweb_util:make_io(K), <<": ">>, V, <<"\r\n">> | Acc]
+        end,
+    End = lists:foldl(F, [<<"\r\n">>], mochiweb_headers:to_list(HResponse2)),
+    Response = mochiweb:new_response({THIS, Code, HResponse2}),
+    {[make_version(Version), make_code(Code), <<"\r\n">> | End], Response};
+format_response_header({Code, ResponseHeaders, Length}) ->
+    HResponse = mochiweb_headers:make(ResponseHeaders),
+    HResponse1 = mochiweb_headers:enter("Content-Length", Length, HResponse),
+    format_response_header({Code, HResponse1}, THIS).
 
 %% @spec respond({integer(), ioheaders(), iodata() | chunked | {file, IoDevice}}) -> response()
 %% @doc Start the HTTP response with start_response, and send Body to the
@@ -318,12 +338,10 @@ respond({Code, ResponseHeaders, chunked}) ->
                  end,
     start_response({Code, HResponse1});
 respond({Code, ResponseHeaders, Body}) ->
-    Response = start_response_length({Code, ResponseHeaders, iolist_size(Body)}),
+    {Header, Response} = format_response_header({Code, ResponseHeaders, iolist_size(Body)}),
     case Method of
-        'HEAD' ->
-            ok;
-        _ ->
-            send(Body)
+        'HEAD' -> send(Header);
+        _      -> send([Header, Body])
     end,
     Response.
 
