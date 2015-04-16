@@ -64,6 +64,9 @@ new_request({Socket, {Method, '*'=Uri, Version}, Headers}) ->
                          Uri,
                          Version,
                          mochiweb_headers:make(Headers));
+new_request({Socket, {"CONNECT", {scheme, Host, Port}, Version}, Headers}) ->
+    Uri = lists:concat([Host, ":", Port]),
+    mochiweb_request:new(Socket, "CONNECT", Uri, Version, mochiweb_headers:make(Headers));
 new_request({Socket, {Method, {scheme, _Host, _Port}, Version}, Headers}) ->
     mochiweb_request:new(Socket, Method, "", Version, mochiweb_headers:make(Headers)).
 
