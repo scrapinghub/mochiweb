@@ -1,3 +1,4 @@
 
--define(RECBUF_SIZE, 8192).
+-define(RECBUF_SIZE, 32768).
+-define(REQUEST_LINE_LIMIT, 8192).
 
