@@ -5,6 +5,9 @@
 
 -module(mochiweb_http).
 -author('bob@mochimedia.com').
+
+-include("internal.hrl").
+
 -export([start/1, start_link/1, stop/0, stop/1]).
 -export([loop/2]).
 -export([headers/5]).
@@ -98,8 +101,16 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             call_body(Body, Req),
             ?MODULE:after_response(Body, Req);
         {Protocol, _, {http_header, _, Name, _, Value}} when Protocol == http orelse Protocol == ssl ->
-            headers(Socket, Request, [{Name, Value} | Headers], Body,
-                    1 + HeaderCount);
+            case iolist_size([to_list(Name), $:, Value, "\r\n"]) of
+                N when N > ?REQUEST_LINE_LIMIT ->
+                    Req = new_request(Socket, Request, []),
+                    Req:respond({413, [], "Request line too large"}),
+                    mochiweb_socket:close(Socket),
+                    exit(normal);
+                _ ->
+                    headers(Socket, Request, [{Name, Value} | Headers], Body,
+                            1 + HeaderCount)
+            end;
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
@@ -114,6 +125,11 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
         mochiweb_socket:close(Socket),
         exit(normal)
     end.
+
+to_list(A) when is_atom(A) ->
+    atom_to_list(A);
+to_list(L) when is_list(L) ->
+    L.
 
 call_body({M, F, A}, Req) ->
     erlang:apply(M, F, [Req | A]);
