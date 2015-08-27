@@ -170,7 +170,12 @@ body_length() ->
                 undefined ->
                     undefined;
                 Length ->
-                    list_to_integer(Length)
+                    try
+                        list_to_integer(Length)
+                    catch
+                        error:badarg ->
+                            mochiweb_http:handle_invalid_request(Socket)
+                    end
             end;
         "chunked" ->
             chunked;
