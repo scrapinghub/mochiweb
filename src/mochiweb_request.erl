@@ -266,8 +266,10 @@ start_response({Code, ResponseHeaders}) ->
 %% @doc Start the HTTP response by sending the Code HTTP response and
 %%      ResponseHeaders.
 start_raw_response({Code, ResponseHeaders}) ->
+    error_logger:info_msg("start_raw_response: ResponseHeaders: ~p~n", [ResponseHeaders]),
     {Header, Response} = format_response_header({Code, ResponseHeaders}),
     send(Header),
+    error_logger:info_msg("start_raw_response: SendHeader ~p~n", [Header]),
     mochiweb:new_response({THIS, Code, ResponseHeaders}).
 
 
