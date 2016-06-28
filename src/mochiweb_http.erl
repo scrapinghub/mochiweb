@@ -101,16 +101,7 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             call_body(Body, Req),
             ?MODULE:after_response(Body, Req);
         {Protocol, _, {http_header, _, Name, _, Value}} when Protocol == http orelse Protocol == ssl ->
-            case iolist_size([to_list(Name), $:, Value, "\r\n"]) of
-                N when N > ?REQUEST_LINE_LIMIT ->
-                    Req = new_request(Socket, Request, []),
-                    Req:respond({413, [], "Request line too large"}),
-                    mochiweb_socket:close(Socket),
-                    exit(normal);
-                _ ->
-                    headers(Socket, Request, [{Name, Value} | Headers], Body,
-                            1 + HeaderCount)
-            end;
+            headers(Socket, Request, [{Name, Value} | Headers], Body, 1 + HeaderCount);
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
             exit(normal);
@@ -126,10 +117,6 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
         exit(normal)
     end.
 
-to_list(A) when is_atom(A) ->
-    atom_to_list(A);
-to_list(L) when is_list(L) ->
-    L.
 
 call_body({M, F, A}, Req) ->
     erlang:apply(M, F, [Req | A]);
