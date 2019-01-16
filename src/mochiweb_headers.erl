@@ -64,7 +64,12 @@ from_binary(RawHttpHeader, Acc) ->
 %% @spec from_list([{key(), value()}]) -> headers()
 %% @doc Construct a headers() from the given list.
 from_list(List) ->
-    lists:foldl(fun ({K, V}, T) -> insert(K, V, T) end, empty(), List).
+    lists:foldl(
+        fun({Key, Value}, Headers) -> insert(Key, Value, Headers) end,
+        {0, dict:new()},
+        List
+    ).
+% from_list(_) -> erlang:error(badarg).
 
 %% @spec enter_from_list([{key(), value()}], headers()) -> headers()
 %% @doc Insert pairs into the headers, replace any values for existing keys.
@@ -80,14 +85,33 @@ default_from_list(List, T) ->
 %% @doc Return the contents of the headers. The keys will be the exact key
 %%      that was first inserted (e.g. may be an atom or binary, case is
 %%      preserved).
-to_list(T) ->
-    F = fun ({K, {array, L}}, Acc) ->
-                L1 = lists:reverse(L),
-                lists:foldl(fun (V, Acc1) -> [{K, V} | Acc1] end, Acc, L1);
-            (Pair, Acc) ->
-                [Pair | Acc]
-        end,
-    lists:reverse(lists:foldl(F, [], gb_trees:values(T))).
+% to_list(T) ->
+%     F = fun ({K, {array, L}}, Acc) ->
+%                 L1 = lists:reverse(L),
+%                 lists:foldl(fun (V, Acc1) -> [{K, V} | Acc1] end, Acc, L1);
+%             (Pair, Acc) ->
+%                 [Pair | Acc]
+%         end,
+%     lists:reverse(lists:foldl(F, [], gb_trees:values(T))).
+to_list(Headers) ->
+  Result = fold(
+    fun(Key, Value, Acc) -> [{Key, Value} | Acc] end,
+    [],
+    Headers
+  ),
+lists:reverse(Result).
+
+fold(Fun, Acc, {_, Headers}) ->
+  Lines = dict:fold(
+    fun(_, Value, Acc1) -> Value ++ Acc1 end,
+    [],
+    Headers
+  ),
+  do_fold(lists:sort(Lines), Fun, Acc).
+
+do_fold([{_, Key, Value} | Rest], Fun, Acc) ->
+  do_fold(Rest, Fun, Fun(Key, Value, Acc));
+do_fold([], _Fun, Acc) -> Acc.
 
 %% @spec get_value(key(), headers()) -> string() | undefined
 %% @doc Return the value of the given header using a case insensitive search.
@@ -116,51 +140,54 @@ get_primary_value(K, T) ->
 %% @doc Return the case preserved key and value for the given header using
 %%      a case insensitive search. none will be returned for keys that are
 %%      not present.
-lookup(K, T) ->
-    case gb_trees:lookup(normalize(K), T) of
-        {value, {K0, V}} ->
-            {value, {K0, expand(V)}};
-        none ->
+lookup(K, {_, Headers}) ->
+    case dict:find(normalize(K), Headers) of
+        {ok, V} ->
+            VV = [VA || {_, _, VA} <- V],
+            [{_,K0,_} | _] = V,
+            {value, {K0, expand({array, lists:reverse(VV)})}};
+        error ->
             none
     end.
 
 %% @spec default(key(), value(), headers()) -> headers()
 %% @doc Insert the pair into the headers if it does not already exist.
-default(K, V, T) ->
+default(K, V, {N, Headers}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    try gb_trees:insert(K1, {K, V1}, T)
-    catch
-        error:{key_exists, _} ->
-            T
+    case dict:is_key(K1, Headers) of
+        true  -> {N, Headers};
+        false -> {N + 1, dict:store(K1, [{N, K, V1}], Headers)}
     end.
 
 %% @spec enter(key(), value(), headers()) -> headers()
 %% @doc Insert the pair into the headers, replacing any pre-existing key.
-enter(K, V, T) ->
+enter(K, V, {N, Headers}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    gb_trees:enter(K1, {K, V1}, T).
+    % TODO: try dict:update()
+    % store unlike append doesn't set value as a list
+    {N + 1, dict:store(K1, [{N, K, V1}], Headers)}.
 
 %% @spec insert(key(), value(), headers()) -> headers()
 %% @doc Insert the pair into the headers, merging with any pre-existing key.
 %%      A merge is done with Value = V0 ++ ", " ++ V1.
-insert(K, V, T) ->
+insert(K, V, {N, Headers}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    try gb_trees:insert(K1, {K, V1}, T)
-    catch
-        error:{key_exists, _} ->
-            {K0, V0} = gb_trees:get(K1, T),
-            V2 = merge(K1, V1, V0),
-            gb_trees:update(K1, {K0, V2}, T)
-    end.
+    %% TODO: append creates a list, behavior like wanted for set-cookie, gotta check this
+    {N + 1, dict:update(K1, fun (Old) -> merge(K1, {N, K, V1}, Old) end, [{N, K, V1}], Headers)}.
+    % {N + 1, dict:update(K1, fun (Old) -> Old ++ [{N, K, V1}] end, [{N, K, V1}], Headers)}.
+    % {N + 1, dict:append(K1, {N, K, V1}, Headers)}.
 
 %% @spec delete_any(key(), headers()) -> headers()
 %% @doc Delete the header corresponding to key if it is present.
-delete_any(K, T) ->
+delete_any(K, {N, Headers}) ->
     K1 = normalize(K),
-    gb_trees:delete_any(K1, T).
+    case dict:take(K1, Headers) of
+        {_, NewHeaders} -> {N - 1, NewHeaders};
+        error -> {N, Headers}
+    end.
 
 %% Internal API
 
@@ -169,12 +196,14 @@ expand({array, L}) ->
 expand(V) ->
     V.
 
-merge("set-cookie", V1, {array, L}) ->
-    {array, [V1 | L]};
 merge("set-cookie", V1, V0) ->
-    {array, [V1, V0]};
+    V0 ++ [V1];
 merge(_, V1, V0) ->
-    V0 ++ ", " ++ V1.
+    V = V0 ++ [V1],
+    [X | _] = V0,
+    {N, K0, _} = X,
+    VV = [VA || {_, _, VA} <- V],
+    [{N, K0,  expand({array, lists:reverse(VV)})}].
 
 normalize(K) when is_list(K) ->
     string:to_lower(K);
@@ -207,7 +236,7 @@ make_test() ->
 enter_from_list_test() ->
     H = make([{hdr, foo}]),
     ?assertEqual(
-       [{baz, "wibble"}, {hdr, "foo"}],
+       [{hdr, "foo"}, {baz, "wibble"}],
        to_list(enter_from_list([{baz, wibble}], H))),
     ?assertEqual(
        [{hdr, "bar"}],
@@ -217,7 +246,7 @@ enter_from_list_test() ->
 default_from_list_test() ->
     H = make([{hdr, foo}]),
     ?assertEqual(
-       [{baz, "wibble"}, {hdr, "foo"}],
+       [{hdr, "foo"}, {baz, "wibble"}],
        to_list(default_from_list([{baz, wibble}], H))),
     ?assertEqual(
        [{hdr, "foo"}],
@@ -294,6 +323,7 @@ headers_test() ->
     [] = ?MODULE:to_list(?MODULE:from_binary([<<"">>])),
     [] = ?MODULE:to_list(?MODULE:from_binary([<<"\r\n">>])),
     [] = ?MODULE:to_list(?MODULE:from_binary([<<"\r\n\r\n">>])),
+    [{"ccc","444"}, {"aaa","123"}, {"bbb","321"}] = ?MODULE:to_list(?MODULE:from_list([{"ccc","444"}, {"aaa","123"}, {"bbb","321"}])),
     ok.
 
 -endif.
