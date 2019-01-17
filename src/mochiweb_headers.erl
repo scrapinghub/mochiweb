@@ -5,20 +5,15 @@
 
 -module(mochiweb_headers).
 -author('bob@mochimedia.com').
--export([empty/0, from_list/1, insert/3, enter/3, get_value/2, lookup/2]).
+-export([from_list/1, insert/3, enter/3, get_value/2, lookup/2]).
 -export([delete_any/2, get_primary_value/2]).
 -export([default/3, enter_from_list/2, default_from_list/2]).
--export([to_list/1, make/1]).
+-export([to_list/1, make/1, to_normalized_list/1]).
 -export([from_binary/1]).
 
 %% @type headers().
 %% @type key() = atom() | binary() | string().
 %% @type value() = atom() | binary() | string() | integer().
-
-%% @spec empty() -> headers()
-%% @doc Create an empty headers structure.
-empty() ->
-    gb_trees:empty().
 
 %% @spec make(headers() | [{key(), value()}]) -> headers()
 %% @doc Construct a headers() from the given list.
@@ -69,7 +64,6 @@ from_list(List) ->
         {0, dict:new()},
         List
     ).
-% from_list(_) -> erlang:error(badarg).
 
 %% @spec enter_from_list([{key(), value()}], headers()) -> headers()
 %% @doc Insert pairs into the headers, replace any values for existing keys.
@@ -85,14 +79,6 @@ default_from_list(List, T) ->
 %% @doc Return the contents of the headers. The keys will be the exact key
 %%      that was first inserted (e.g. may be an atom or binary, case is
 %%      preserved).
-% to_list(T) ->
-%     F = fun ({K, {array, L}}, Acc) ->
-%                 L1 = lists:reverse(L),
-%                 lists:foldl(fun (V, Acc1) -> [{K, V} | Acc1] end, Acc, L1);
-%             (Pair, Acc) ->
-%                 [Pair | Acc]
-%         end,
-%     lists:reverse(lists:foldl(F, [], gb_trees:values(T))).
 to_list(Headers) ->
   Result = fold(
     fun(Key, Value, Acc) -> [{Key, Value} | Acc] end,
@@ -101,17 +87,17 @@ to_list(Headers) ->
   ),
 lists:reverse(Result).
 
-fold(Fun, Acc, {_, Headers}) ->
-  Lines = dict:fold(
-    fun(_, Value, Acc1) -> Value ++ Acc1 end,
-    [],
-    Headers
-  ),
-  do_fold(lists:sort(Lines), Fun, Acc).
-
-do_fold([{_, Key, Value} | Rest], Fun, Acc) ->
-  do_fold(Rest, Fun, Fun(Key, Value, Acc));
-do_fold([], _Fun, Acc) -> Acc.
+%% @spec to_list(headers()) -> [{key(), string()}]
+%% @doc Return the contents of the headers. The keys will be the exact key
+%%      that was first inserted (e.g. may be an atom or binary, case is
+%%      preserved).
+to_normalized_list(Headers) ->
+    Result = fold(
+        fun(Key, Value, Acc) -> [{normalize(Key), Value} | Acc] end,
+        [],
+        Headers
+    ),
+    lists:reverse(Result).
 
 %% @spec get_value(key(), headers()) -> string() | undefined
 %% @doc Return the value of the given header using a case insensitive search.
@@ -142,10 +128,9 @@ get_primary_value(K, T) ->
 %%      not present.
 lookup(K, {_, Headers}) ->
     case dict:find(normalize(K), Headers) of
-        {ok, V} ->
-            VV = [VA || {_, _, VA} <- V],
-            [{_,K0,_} | _] = V,
-            {value, {K0, expand({array, lists:reverse(VV)})}};
+        {ok, KVs} ->
+            [{_, K0, _} | _] = KVs,
+            {value, {K0, join_values(KVs)}};
         error ->
             none
     end.
@@ -165,8 +150,6 @@ default(K, V, {N, Headers}) ->
 enter(K, V, {N, Headers}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    % TODO: try dict:update()
-    % store unlike append doesn't set value as a list
     {N + 1, dict:store(K1, [{N, K, V1}], Headers)}.
 
 %% @spec insert(key(), value(), headers()) -> headers()
@@ -175,18 +158,24 @@ enter(K, V, {N, Headers}) ->
 insert(K, V, {N, Headers}) ->
     K1 = normalize(K),
     V1 = any_to_list(V),
-    %% TODO: append creates a list, behavior like wanted for set-cookie, gotta check this
-    {N + 1, dict:update(K1, fun (Old) -> merge(K1, {N, K, V1}, Old) end, [{N, K, V1}], Headers)}.
-    % {N + 1, dict:update(K1, fun (Old) -> Old ++ [{N, K, V1}] end, [{N, K, V1}], Headers)}.
-    % {N + 1, dict:append(K1, {N, K, V1}, Headers)}.
+    Headers2 = dict:update(
+        K1, 
+        fun (Old) -> merge(K1, {N, K, V1}, Old) end,
+        [{N, K, V1}],
+        Headers
+    ),
+    {N + 1, Headers2}.
 
 %% @spec delete_any(key(), headers()) -> headers()
 %% @doc Delete the header corresponding to key if it is present.
-delete_any(K, {N, Headers}) ->
+delete_any(K, {N, Headers}=H) ->
     K1 = normalize(K),
-    case dict:take(K1, Headers) of
-        {_, NewHeaders} -> {N - 1, NewHeaders};
-        error -> {N, Headers}
+    case dict:find(K1, Headers) of
+        {ok, Values} ->
+            Headers2 = dict:erase(K1, Headers),
+            {N - length(Values), Headers2};
+        error ->
+            H
     end.
 
 %% Internal API
@@ -199,11 +188,11 @@ expand(V) ->
 merge("set-cookie", V1, V0) ->
     V0 ++ [V1];
 merge(_, V1, V0) ->
-    V = V0 ++ [V1],
-    [X | _] = V0,
-    {N, K0, _} = X,
-    VV = [VA || {_, _, VA} <- V],
-    [{N, K0,  expand({array, lists:reverse(VV)})}].
+    [{N, K0, _}| _] = V0,
+    [{N, K0, join_values(V0 ++ [V1])}].
+
+join_values(L) ->
+    mochiweb_util:join([V || {_, _, V} <- L], ", ").
 
 normalize(K) when is_list(K) ->
     string:to_lower(K);
@@ -220,6 +209,19 @@ any_to_list(V) when is_binary(V) ->
     binary_to_list(V);
 any_to_list(V) when is_integer(V) ->
     integer_to_list(V).
+
+fold(Fun, Acc, {_, Headers}) ->
+    Lines = dict:fold(
+        fun(_, Value, Acc1) -> Value ++ Acc1 end,
+        [],
+        Headers
+    ),
+    do_fold(lists:sort(Lines), Fun, Acc).
+
+do_fold([{_, Key, Value} | Rest], Fun, Acc) ->
+    do_fold(Rest, Fun, Fun(Key, Value, Acc));
+do_fold([], _Fun, Acc) -> Acc.
+
 
 %%
 %% Tests.
@@ -293,6 +295,11 @@ headers_test() ->
                                              "content-type", H4),
     H4 = ?MODULE:delete_any("nonexistent-header", H4),
     H3 = ?MODULE:delete_any("content-type", H4),
+    H5 = ?MODULE:make([{"ccc","444"}, {"aaa","123"}, {"bbb","321"}]),
+    H5_Case = ?MODULE:make([{"CCC","444"}, {"Aaa","123"}, {"Bbb","321"}]),
+    H5_List = [{"ccc","444"}, {"aaa","123"}, {"bbb","321"}],
+    H5_List = ?MODULE:to_list(H5),
+    H5_List = ?MODULE:to_normalized_list(H5_Case),
     HB = <<"Content-Length: 47\r\nContent-Type: text/plain\r\n\r\n">>,
     H_HB = ?MODULE:from_binary(HB),
     H_HB = ?MODULE:from_binary(binary_to_list(HB)),
@@ -323,7 +330,6 @@ headers_test() ->
     [] = ?MODULE:to_list(?MODULE:from_binary([<<"">>])),
     [] = ?MODULE:to_list(?MODULE:from_binary([<<"\r\n">>])),
     [] = ?MODULE:to_list(?MODULE:from_binary([<<"\r\n\r\n">>])),
-    [{"ccc","444"}, {"aaa","123"}, {"bbb","321"}] = ?MODULE:to_list(?MODULE:from_list([{"ccc","444"}, {"aaa","123"}, {"bbb","321"}])),
     ok.
 
 -endif.
