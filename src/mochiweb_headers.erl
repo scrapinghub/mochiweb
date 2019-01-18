@@ -87,10 +87,8 @@ to_list(Headers) ->
   ),
 lists:reverse(Result).
 
-%% @spec to_list(headers()) -> [{key(), string()}]
-%% @doc Return the contents of the headers. The keys will be the exact key
-%%      that was first inserted (e.g. may be an atom or binary, case is
-%%      preserved).
+%% @spec to_normalized_list(headers()) -> [{key(), string()}]
+%% @doc Return the contents of the headers. The keys will be normalized
 to_normalized_list(Headers) ->
     Result = fold(
         fun(Key, Value, Acc) -> [{normalize(Key), Value} | Acc] end,
