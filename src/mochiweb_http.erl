@@ -120,7 +120,7 @@ handle_invalid_request(Socket) ->
 -spec handle_invalid_request(term(), term(), term()) -> no_return().
 handle_invalid_request(Socket, Request, RevHeaders) ->
     Req = new_request(Socket, Request, RevHeaders),
-    Req:respond({400, [], []}),
+    mochiweb_request:respond({400, [], []}, Req),
     mochiweb_socket:close(Socket),
     exit(normal).
 
@@ -129,13 +129,13 @@ new_request(Socket, Request, RevHeaders) ->
     mochiweb:new_request({Socket, Request, lists:reverse(RevHeaders)}).
 
 after_response(Body, Req) ->
-    Socket = Req:get(socket),
+    Socket = mochiweb_request:get(socket, Req),
     case Req:should_close() of
         true ->
             mochiweb_socket:close(Socket),
             exit(normal);
         false ->
-            Req:cleanup(),
+            mochiweb_request:cleanup(Req),
             erlang:garbage_collect(),
             ?MODULE:loop(Socket, Body)
     end.
