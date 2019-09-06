@@ -165,9 +165,9 @@ split_header(Line) ->
 read_chunk(Req, Length) when Length > 0 ->
     case Length of
         Length when Length < ?CHUNKSIZE ->
-            Req:recv(Length);
+            mochiweb_request:recv(Length, Req);
         _ ->
-            Req:recv(?CHUNKSIZE)
+            mochiweb_request:recv(?CHUNKSIZE, Req)
     end.
 
 read_more(State=#mp{length=Length, buffer=Buffer, req=Req}) ->

@@ -30,25 +30,25 @@ get(headers) ->
 %% @doc Dump the internal representation to a "human readable" set of terms
 %%      for debugging/inspection purposes.
 dump() ->
-    [{request, Request:dump()},
+    [{request, mochiweb_request:dump(Request)},
      {code, Code},
      {headers, mochiweb_headers:to_list(Headers)}].
 
 %% @spec send(iodata()) -> ok
 %% @doc Send data over the socket if the method is not HEAD.
 send(Data) ->
-    case Request:get(method) of
+    case mochiweb_request:get(method, Request) of
         'HEAD' ->
             ok;
         _ ->
-            Request:send(Data)
+            mochiweb_request:send(Data, Request)
     end.
 
 %% @spec write_chunk(iodata()) -> ok
 %% @doc Write a chunk of a HTTP chunked response. If Data is zero length,
 %%      then the chunked response will be finished.
 write_chunk(Data) ->
-    case Request:get(version) of
+    case mochiweb_request:get(version, Request) of
         Version when Version >= {1, 1} ->
             Length = iolist_size(Data),
             send([io_lib:format("~.16b\r\n", [Length]), Data, <<"\r\n">>]);

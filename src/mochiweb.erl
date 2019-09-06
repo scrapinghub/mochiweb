@@ -179,8 +179,8 @@ do_GET(Transport, Times) ->
     PathPrefix = "/whatever/",
     ReplyPrefix = "You requested: ",
     ServerFun = fun (Req) ->
-                        Reply = ReplyPrefix ++ Req:get(path),
-                        Req:ok({"text/plain", Reply})
+                        Reply = ReplyPrefix ++ mochiweb_request:get(path, Req),
+                        mochiweb_request:ok({"text/plain", Reply}, Req)
                 end,
     TestReqs = [begin
                     Path = PathPrefix ++ integer_to_list(N),
@@ -195,7 +195,7 @@ do_POST(Transport, Size, Times) ->
     ServerFun = fun (Req) ->
                         Body = Req:recv_body(),
                         Headers = [{"Content-Type", "application/octet-stream"}],
-                        Req:respond({201, Headers, Body})
+                        mochiweb_request:respond({201, Headers, Body}, Req)
                 end,
     TestReqs = [begin
                     Path = "/stuff/" ++ integer_to_list(N),
