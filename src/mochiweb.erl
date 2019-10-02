@@ -257,10 +257,14 @@ client_request(SockFun, Method,
             {ok, {http_response, {1,1}, 201, "Created"}} = SockFun(recv)
     end,
     ok = SockFun({setopts, [{packet, httph}]}),
-    {ok, {http_header, _, 'Date', _, _}} = SockFun(recv),
-    {ok, {http_header, _, 'Server', _, "MochiWeb" ++ _}} = SockFun(recv),
-    {ok, {http_header, _, 'Content-Length', _, ConLenStr}} = SockFun(recv),
     {ok, {http_header, _, 'Content-Type', _, _}} = SockFun(recv),
+    {ok, {http_header, _, 'Content-Length', _, ConLenStr}} = SockFun(recv),
+    {ok, {http_header, _, 'Date', _, _}} = SockFun(recv),
+    case Rest of
+        [] ->
+            {ok, {http_header, _, 'Connection', _, "close"}} = SockFun(recv);
+        _ -> ok
+    end,
     ContentLength = list_to_integer(ConLenStr),
     {ok, http_eoh} = SockFun(recv),
     ok = SockFun({setopts, [{packet, raw}]}),
