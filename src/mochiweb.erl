@@ -260,11 +260,8 @@ client_request(SockFun, Method,
     {ok, {http_header, _, 'Content-Type', _, _}} = SockFun(recv),
     {ok, {http_header, _, 'Content-Length', _, ConLenStr}} = SockFun(recv),
     {ok, {http_header, _, 'Date', _, _}} = SockFun(recv),
-    case Rest of
-        [] ->
-            {ok, {http_header, _, 'Connection', _, "close"}} = SockFun(recv);
-        _ -> ok
-    end,
+    {ok, {http_header, _, 'Proxy-Connection', _, "close"}} = SockFun(recv),
+    {ok, {http_header, _, 'Connection', _, "close"}} = SockFun(recv),
     ContentLength = list_to_integer(ConLenStr),
     {ok, http_eoh} = SockFun(recv),
     ok = SockFun({setopts, [{packet, raw}]}),

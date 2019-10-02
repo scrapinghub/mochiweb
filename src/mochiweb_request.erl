@@ -640,8 +640,8 @@ maybe_serve_file(File, ExtraHeaders) ->
 
 server_headers() ->
     [{"Date", httpd_util:rfc1123_date()},
-     {"Connection", "close"},
-     {"Proxy-Connection", "close"}].
+     {"Proxy-Connection", "close"},
+     {"Connection", "close"}].
 
 make_code(X) when is_integer(X) ->
     [integer_to_list(X), [" " | httpd_util:reason_phrase(X)]];
