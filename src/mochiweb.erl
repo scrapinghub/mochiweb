@@ -80,6 +80,7 @@ new_response({Request, Code, Headers}) ->
 %% @spec ensure_started(App::atom()) -> ok
 %% @doc Start the given App if it has not been started already.
 ensure_started(App) ->
+    application:ensure_started(asn1),
     case application:start(App) of
         ok ->
             ok;
