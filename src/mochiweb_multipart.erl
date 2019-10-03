@@ -38,7 +38,7 @@ parts_to_body([{Start, End, Body}], ContentType, Size) ->
     {HeaderList, Body};
 parts_to_body(BodyList, ContentType, Size) when is_list(BodyList) ->
     parts_to_multipart_body(BodyList, ContentType, Size,
-                            mochihex:to_hex(crypto:rand_bytes(8))).
+                            mochihex:to_hex(crypto:strong_rand_bytes(8))).
 
 %% @spec parts_to_multipart_body([bodypart()], ContentType::string(),
 %%                               Size::integer(), Boundary::string()) ->
@@ -128,9 +128,9 @@ default_file_handler_1(Filename, ContentType, Acc) ->
 
 parse_multipart_request(Req, Callback) ->
     %% TODO: Support chunked?
-    Length = list_to_integer(Req:get_header_value("content-length")),
+    Length = list_to_integer(mochiweb_request:get_header_value("content-length", Req)),
     Boundary = iolist_to_binary(
-                 get_boundary(Req:get_header_value("content-type"))),
+                 get_boundary(mochiweb_request:get_header_value("content-type", Req))),
     Prefix = <<"\r\n--", Boundary/binary>>,
     BS = byte_size(Boundary),
     Chunk = read_chunk(Req, Length),
