@@ -54,15 +54,24 @@ get_field(Key, Args) ->
 %%      replacing Args with the result of the previous get_value. This
 %%      is used to implement formats such as {0.0}.
 get_field(Key, Args, Module) ->
-    {Name, Next} = lists:splitwith(fun (C) -> C =/= $. end, Key),
-    Res = try Module:get_value(Name, Args)
-          catch error:undef -> get_value(Name, Args) end,
+    {Name, Next} = lists:splitwith(fun (C) -> C =/= $. end,
+                   Key),
+    Res = mod_get_value(Name, Args, Module),
     case Next of
-        "" ->
-            Res;
-        "." ++ S1 ->
-            get_field(S1, Res, Module)
+      "" -> Res;
+      "." ++ S1 -> get_field(S1, Res, Module)
     end.
+
+mod_get_value(Name, Args, Module) ->
+    try tuple_apply(Module, get_value, [Name, Args]) catch
+      error:undef -> get_value(Name, Args)
+    end.
+
+tuple_apply(Module, F, Args) when is_atom(Module) ->
+    erlang:apply(Module, F, Args);
+tuple_apply(Module, F, Args)
+    when is_tuple(Module), is_atom(element(1, Module)) ->
+    erlang:apply(element(1, Module), F, Args ++ [Module]).
 
 %% @spec format(Format::string(), Args) -> iolist()
 %% @doc Format Args with Format.
@@ -171,25 +180,32 @@ proplist_lookup2({KS, KA, KB}, [{K, V} | _])
 proplist_lookup2(Keys, [_ | Rest]) ->
     proplist_lookup2(Keys, Rest).
 
-format2([], _Args, _Module, Acc) ->
-    lists:reverse(Acc);
+format2([], _Args, _Module, Acc) -> lists:reverse(Acc);
 format2([{raw, S} | Rest], Args, Module, Acc) ->
     format2(Rest, Args, Module, [S | Acc]);
-format2([{format, {Key, Convert, Format0}} | Rest], Args, Module, Acc) ->
+format2([{format, {Key, Convert, Format0}} | Rest],
+    Args, Module, Acc) ->
     Format = f(Format0, Args, Module),
     V = case Module of
-            ?MODULE ->
-                V0 = get_field(Key, Args),
-                V1 = convert_field(V0, Convert),
-                format_field(V1, Format);
-            _ ->
-                V0 = try Module:get_field(Key, Args)
-                     catch error:undef -> get_field(Key, Args, Module) end,
-                V1 = try Module:convert_field(V0, Convert)
-                     catch error:undef -> convert_field(V0, Convert) end,
-                try Module:format_field(V1, Format)
-                catch error:undef -> format_field(V1, Format, Module) end
-        end,
+      ?MODULE ->
+          V0 = get_field(Key, Args),
+          V1 = convert_field(V0, Convert),
+          format_field(V1, Format);
+      _ ->
+          V0 = try tuple_apply(Module, get_field, [Key, Args])
+           catch
+             error:undef -> get_field(Key, Args, Module)
+           end,
+          V1 = try tuple_apply(Module, convert_field,
+                   [V0, Convert])
+           catch
+             error:undef -> convert_field(V0, Convert)
+           end,
+          try tuple_apply(Module, format_field, [V1, Format])
+          catch
+        error:undef -> format_field(V1, Format, Module)
+          end
+    end,
     format2(Rest, Args, Module, [V | Acc]).
 
 default_ctype(_Arg, C=#conversion{ctype=N}) when N =/= undefined ->
@@ -415,9 +431,9 @@ std_test() ->
 records_test() ->
     M = mochifmt_records:new([{conversion, record_info(fields, conversion)}]),
     R = #conversion{length=long, precision=hard, sign=peace},
-    long = M:get_value("length", R),
-    hard = M:get_value("precision", R),
-    peace = M:get_value("sign", R),
+    long = mochifmt_records:get_value("length", R, M),
+    hard = mochifmt_records:get_value("precision", R, M),
+    peace = mochifmt_records:get_value("sign", R, M),
     <<"long hard">> = bformat("{length} {precision}", R, M),
     <<"long hard">> = bformat("{0.length} {0.precision}", [R], M),
     ok.

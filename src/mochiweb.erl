@@ -119,7 +119,7 @@ with_server(Transport, ServerFun, ClientFun) ->
 
 request_test() ->
     R = mochiweb_request:new(z, z, "/foo/bar/baz%20wibble+quux?qs=2", z, []),
-    "/foo/bar/baz wibble quux" = R:get(path),
+    "/foo/bar/baz wibble quux" = mochiweb_request:get(path, R),
     ok.
 
 -define(LARGE_TIMEOUT, 60).
@@ -194,13 +194,13 @@ do_GET(Transport, Times) ->
 
 do_POST(Transport, Size, Times) ->
     ServerFun = fun (Req) ->
-                        Body = Req:recv_body(),
+                        Body = mochiweb_request:recv_body(Req),
                         Headers = [{"Content-Type", "application/octet-stream"}],
                         mochiweb_request:respond({201, Headers, Body}, Req)
                 end,
     TestReqs = [begin
                     Path = "/stuff/" ++ integer_to_list(N),
-                    Body = crypto:rand_bytes(Size),
+                    Body = crypto:strong_rand_bytes(Size),
                     #treq{path=Path, body=Body, xreply=Body}
                 end || N <- lists:seq(1, Times)],
     ClientFun = new_client_fun('POST', TestReqs),
@@ -266,7 +266,7 @@ client_request(SockFun, Method,
     {ok, http_eoh} = SockFun(recv),
     ok = SockFun({setopts, [{packet, raw}]}),
     {payload, ExReply} = {payload, drain_reply(SockFun, ContentLength, <<>>)},
-    ok = SockFun({setopts, [{packet, http}]}),
+    SockFun({setopts, [{packet, http}]}),
     client_request(SockFun, Method, Rest).
 
 client_headers(Body, IsLastRequest) ->

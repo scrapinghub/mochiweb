@@ -143,7 +143,7 @@ new_request(Socket, Request, RevHeaders) ->
 
 after_response(Body, Req) ->
     Socket = mochiweb_request:get(socket, Req),
-    case Req:should_close() of
+    case mochiweb_request:should_close(Req) of
         true ->
             mochiweb_socket:close(Socket),
             exit(normal);
