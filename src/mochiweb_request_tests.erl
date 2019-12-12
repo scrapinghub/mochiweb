@@ -149,4 +149,31 @@ accepted_content_types_test() ->
     ?assertEqual(["application/json", "text/html"],
         mochiweb_request:accepted_content_types(["text/html", "application/json"], Req9)).
 
+stream_body_when_expect_header_test() ->
+    {Read, Write} = pipe(),
+    Req = mochiweb_request:new(Write, 'PUT', "/foo", {1, 1},
+        mochiweb_headers:make([{"Expect", "100-continue"}])),
+    mochiweb_request:stream_body(1024, fun(_, _) -> ok end, [], Req),
+    {ok, Response} = gen_tcp:recv(Read, 0),
+    [gen_tcp:close(S) || S <- [Read, Write]],
+    ?assertMatch(<<"HTTP/1.1 100 Continue\r\n", _/binary>>, list_to_binary(Response)).
+
+pipe() ->
+    {ok, ListenSocket} = gen_tcp:listen(0, [{active, false}]),
+    {ok, Port} = inet:port(ListenSocket),
+    Self = self(),
+    spawn_link(fun() ->
+        {ok, Socket} = gen_tcp:accept(ListenSocket),
+        ok = gen_tcp:close(ListenSocket),
+        ok = gen_tcp:controlling_process(Socket, Self),
+        Self ! {socket, Socket}
+    end),
+    {ok, ClientSocket} = gen_tcp:connect("localhost", Port, []),
+    receive
+        {socket, ServerSocket} ->
+            {ServerSocket, ClientSocket}
+        after 5000 ->
+            timeout
+    end.
+
 -endif.
