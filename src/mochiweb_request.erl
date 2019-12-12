@@ -225,7 +225,7 @@ stream_body(MaxChunkSize, ChunkFun, FunState, MaxBodyLength) ->
              end,
     case Expect of
         "100-continue" ->
-            _ = start_raw_response({100, gb_trees:empty()}),
+            _ = start_raw_response({100, []}),
             ok;
         _Else ->
             ok
