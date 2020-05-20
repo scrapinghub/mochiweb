@@ -52,11 +52,11 @@ start_link(Options) ->
     mochiweb_socket_server:start_link(parse_options(Options)).
 
 loop(Socket, Body) ->
-    ok = mochiweb_socket:setopts(Socket, [{packet, http}]),
+    ok = mochiweb_socket:exit_if_closed(mochiweb_socket:setopts(Socket, [{packet, http}])),
     request(Socket, Body).
 
 request(Socket, Body) ->
-    ok = mochiweb_socket:setopts(Socket, [{active, once}]),
+    ok = mochiweb_socket:exit_if_closed(mochiweb_socket:setopts(Socket, [{active, once}])),
     receive
         {Protocol, _, {http_request, Method, Path, Version}} when Protocol == http orelse Protocol == ssl ->
             ok = mochiweb_socket:setopts(Socket, [{packet, httph}]),
@@ -90,11 +90,11 @@ reentry(Body) ->
 
 headers(Socket, Request, Headers, _Body, ?MAX_HEADERS) ->
     %% Too many headers sent, bad request.
-    ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
+    ok = mochiweb_socket:exit_if_closed(mochiweb_socket:setopts(Socket, [{packet, raw}])),
     error_logger:info_msg("too many headers sent~n"),
     handle_invalid_request(Socket, Request, Headers);
 headers(Socket, Request, Headers, Body, HeaderCount) ->
-    ok = mochiweb_socket:setopts(Socket, [{active, once}]),
+    ok = mochiweb_socket:exit_if_closed(mochiweb_socket:setopts(Socket, [{active, once}])),
     receive
         {Protocol, _, http_eoh} when Protocol == http orelse Protocol == ssl ->
             Req = new_request(Socket, Request, Headers),
@@ -138,7 +138,7 @@ handle_invalid_request(Socket, Request, RevHeaders) ->
     exit(normal).
 
 new_request(Socket, Request, RevHeaders) ->
-    ok = mochiweb_socket:setopts(Socket, [{packet, raw}]),
+    ok = mochiweb_socket:exit_if_closed(mochiweb_socket:setopts(Socket, [{packet, raw}])),
     mochiweb:new_request({Socket, Request, lists:reverse(RevHeaders)}).
 
 after_response(Body, Req) ->
