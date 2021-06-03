@@ -185,6 +185,8 @@ expand(V) ->
 
 merge("set-cookie", V1, V0) ->
     V0 ++ [V1];
+merge("x-crawlera-set-cookie", V1, V0) ->
+    V0 ++ [V1];
 merge(_, V1, V0) ->
     [{N, K0, _}| _] = V0,
     [{N, K0, join_values(V0 ++ [V1])}].
