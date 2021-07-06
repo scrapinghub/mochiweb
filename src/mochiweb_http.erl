@@ -100,7 +100,13 @@ headers(Socket, Request, Headers, Body, HeaderCount) ->
             Req = new_request(Socket, Request, Headers),
             call_body(Body, Req),
             ?MODULE:after_response(Body, Req);
-        {Protocol, _, {http_header, _, Name, _, Value}} when Protocol == http orelse Protocol == ssl ->
+        {Protocol, _, {http_header, _, Name1, Name2, Value}} when Protocol == http orelse Protocol == ssl ->
+            Name = case Name2 of
+                undefined ->
+                    Name1;
+                _ ->
+                    Name2
+            end,
             headers(Socket, Request, [{Name, Value} | Headers], Body, 1 + HeaderCount);
         {tcp_closed, _} ->
             mochiweb_socket:close(Socket),
